@@ -196,8 +196,9 @@ Return ONLY this JSON:
     res.json(json);
   } catch (err) {
     console.error("Feedback error:", err);
-    res.status(500).json({ error: "Could not generate feedback." });
-  }
+    res.status(500).json({ 
+  error: err.message,
+  details: "Backend crashed during AI call"
 });
 
 const PORT = process.env.PORT || 3001;
