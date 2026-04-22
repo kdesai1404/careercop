@@ -45,13 +45,21 @@ app.post("/api/parse-pdf", upload.single("resume"), async (req, res) => {
 app.post("/api/analyse", async (req, res) => {
   const { resumeText, field, weeks } = req.body;
 
+  console.log("🚀 Analyse API HIT");
+  console.log("KEY STATUS:", {
+    exists: !!process.env.ANTHROPIC_API_KEY,
+    length: process.env.ANTHROPIC_API_KEY?.length
+  });
+
   if (!resumeText || !field) {
-    return res
-      .status(400)
-      .json({ error: "resumeText and field are required" });
+    return res.status(400).json({
+      error: "resumeText and field are required"
+    });
   }
 
   try {
+    console.log("➡️ Calling Claude API...");
+
     const message = await client.messages.create({
       model: "claude-3-5-sonnet-20241022",
       max_tokens: 1024,
@@ -68,11 +76,15 @@ Return ONLY JSON.`,
       ],
     });
 
+    console.log("✅ Claude response received");
+
     const raw = message.content[0].text;
     const json = JSON.parse(raw.replace(/```json|```/g, "").trim());
+
     res.json(json);
+
   } catch (err) {
-    console.error("Analyse error:", err);
+    console.error("❌ Analyse error FULL:", err);
     res.status(500).json({
       error: err.message,
       details: "Backend crashed during AI call",
