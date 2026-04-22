@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const pdf = require("pdf-parse");
-const Anthropic = require("@anthropic-ai/sdk");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
@@ -12,8 +12,10 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+// ✅ GEMINI SETUP (FREE API)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
 });
 
 app.use(cors({ origin: "*" }));
@@ -36,58 +38,60 @@ app.post("/api/parse-pdf", upload.single("resume"), async (req, res) => {
   } catch (err) {
     console.error("PDF parse error:", err);
     res.status(500).json({
-      error: "Failed to parse PDF. Please paste text instead.",
+      error: "Failed to parse PDF",
     });
   }
 });
 
-// ================= RESUME ANALYSIS =================
+// ================= RESUME ANALYSIS (GEMINI) =================
 app.post("/api/analyse", async (req, res) => {
   const { resumeText, field, weeks } = req.body;
 
-  console.log("🚀 Analyse API HIT");
-  console.log("KEY STATUS:", {
-    exists: !!process.env.ANTHROPIC_API_KEY,
-    length: process.env.ANTHROPIC_API_KEY?.length
-  });
-
   if (!resumeText || !field) {
     return res.status(400).json({
-      error: "resumeText and field are required"
+      error: "resumeText and field are required",
     });
   }
 
   try {
-    console.log("➡️ Calling Claude API...");
+    const prompt = `
+You are a brutally honest but constructive career advisor.
 
-    const message = await client.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 1024,
-      system: `You are a brutally honest but constructive career advisor who analyses resumes for tech internship roles. Always return ONLY valid JSON.`,
-      messages: [
-        {
-          role: "user",
-          content: `Analyse this resume for: "${field}"
+Analyse this resume for: ${field}
 
+Resume:
 ${resumeText}
 
-Return ONLY JSON.`,
-        },
-      ],
-    });
+Return ONLY valid JSON:
+{
+  "match_score": 0-100,
+  "hire_likelihood": "Low|Medium|High|Very High",
+  "summary": "short honest summary",
+  "strengths": ["..."],
+  "existing_skills": ["..."],
+  "missing_skills": ["..."],
+  "top_action": "most important next step",
+  "realistic_goal": "what they can achieve in ${weeks || 4} weeks"
+}
+`;
 
-    console.log("✅ Claude response received");
+    const result = await model.generateContent(prompt);
+    const responseText = await result.response.text();
 
-    const raw = message.content[0].text;
-    const json = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    // safe JSON parse
+    let json;
+    try {
+      json = JSON.parse(responseText.replace(/```json|```/g, "").trim());
+    } catch (e) {
+      json = { raw: responseText };
+    }
 
     res.json(json);
-
   } catch (err) {
-    console.error("❌ Analyse error FULL:", err);
+    console.error("Analyse error:", err);
     res.status(500).json({
       error: err.message,
-      details: "Backend crashed during AI call",
+      details: "Gemini API failed",
     });
   }
 });
@@ -101,30 +105,45 @@ app.post("/api/study-plan", async (req, res) => {
   }
 
   try {
-    const message = await client.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 2048,
-      system: `You are a structured learning coach. Return ONLY JSON.`,
-      messages: [
-        {
-          role: "user",
-          content: `Create ${weeks || 4}-week plan for ${field}.
+    const prompt = `
+Create a ${weeks || 4}-week study plan for ${field}.
 
-Missing: ${(missingSkills || []).join(", ")}
-Existing: ${(existingSkills || []).join(", ")}
+Missing skills: ${(missingSkills || []).join(", ")}
+Existing skills: ${(existingSkills || []).join(", ")}
 
-Return JSON only.`,
-        },
-      ],
-    });
+Return ONLY JSON:
+{
+  "weeks": [
+    {
+      "week": 1,
+      "theme": "string",
+      "goal": "string",
+      "daily_hours": 3,
+      "tasks": ["task1", "task2", "task3"],
+      "resource": "string",
+      "project": "string"
+    }
+  ],
+  "final_project": "string",
+  "apply_strategy": "string"
+}
+`;
 
-    const raw = message.content[0].text;
-    const json = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    const result = await model.generateContent(prompt);
+    const responseText = await result.response.text();
+
+    let json;
+    try {
+      json = JSON.parse(responseText.replace(/```json|```/g, "").trim());
+    } catch (e) {
+      json = { raw: responseText };
+    }
+
     res.json(json);
   } catch (err) {
     console.error("Study plan error:", err);
     res.status(500).json({
-      error: "Study plan generation failed.",
+      error: "Study plan failed",
     });
   }
 });
@@ -138,26 +157,24 @@ app.post("/api/interview/question", async (req, res) => {
   }
 
   try {
-    const message = await client.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 256,
-      system: `You are a senior engineer conducting interviews.`,
-      messages: [
-        {
-          role: "user",
-          content: `Ask question ${questionNumber || 1} for ${field}.
-Previous: ${(previousQuestions || []).join(", ")}
+    const prompt = `
+You are an interviewer for ${field} roles.
 
-Return only question.`,
-        },
-      ],
-    });
+Ask ONE interview question.
+Question number: ${questionNumber || 1}
+Avoid repeating: ${(previousQuestions || []).join(", ")}
 
-    res.json({ question: message.content[0].text.trim() });
+Return ONLY the question text.
+`;
+
+    const result = await model.generateContent(prompt);
+    const responseText = await result.response.text();
+
+    res.json({ question: responseText.trim() });
   } catch (err) {
     console.error("Interview question error:", err);
     res.status(500).json({
-      error: "Could not generate question.",
+      error: "Failed to generate question",
     });
   }
 });
@@ -167,36 +184,42 @@ app.post("/api/interview/feedback", async (req, res) => {
   const { field, question, answer } = req.body;
 
   if (!question || !answer) {
-    return res
-      .status(400)
-      .json({ error: "question and answer required" });
+    return res.status(400).json({
+      error: "question and answer required",
+    });
   }
 
   try {
-    const message = await client.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 400,
-      system: `You are a tough but fair interview coach. Return JSON only.`,
-      messages: [
-        {
-          role: "user",
-          content: `Field: ${field}
+    const prompt = `
+Field: ${field}
 Question: ${question}
 Answer: ${answer}
 
-Return JSON only.`,
-        },
-      ],
-    });
+Return ONLY JSON:
+{
+  "score": 1-10,
+  "verdict": "Good|Needs work|Weak",
+  "what_worked": "string",
+  "what_missed": "string",
+  "model_answer_hint": "string"
+}
+`;
 
-    const raw = message.content[0].text;
-    const json = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    const result = await model.generateContent(prompt);
+    const responseText = await result.response.text();
+
+    let json;
+    try {
+      json = JSON.parse(responseText.replace(/```json|```/g, "").trim());
+    } catch (e) {
+      json = { raw: responseText };
+    }
+
     res.json(json);
   } catch (err) {
     console.error("Feedback error:", err);
     res.status(500).json({
-      error: err.message,
-      details: "Backend crashed during AI call",
+      error: "Feedback failed",
     });
   }
 });
