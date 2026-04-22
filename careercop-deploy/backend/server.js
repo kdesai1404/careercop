@@ -7,18 +7,28 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
+// ================= MULTER =================
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// ✅ GEMINI SETUP (FREE API)
+// ================= GEMINI =================
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
   model: "gemini-1.5-flash",
 });
 
-app.use(cors({ origin: "*" }));
+// ================= MIDDLEWARE (FIXED CORS) =================
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+// IMPORTANT: handle preflight requests
+app.options("*", cors());
+
 app.use(express.json({ limit: "2mb" }));
 
 // ================= HEALTH CHECK =================
@@ -37,36 +47,31 @@ app.post("/api/parse-pdf", upload.single("resume"), async (req, res) => {
     res.json({ text: data.text });
   } catch (err) {
     console.error("PDF parse error:", err);
-    res.status(500).json({
-      error: "Failed to parse PDF",
-    });
+    res.status(500).json({ error: "Failed to parse PDF" });
   }
 });
 
-// ================= RESUME ANALYSIS (GEMINI) =================
+// ================= ANALYSE =================
 app.post("/api/analyse", async (req, res) => {
   const { resumeText, field, weeks } = req.body;
 
   if (!resumeText || !field) {
     return res.status(400).json({
-      error: "resumeText and field are required",
+      error: "resumeText and field required",
     });
   }
 
   try {
     const prompt = `
-You are a brutally honest but constructive career advisor.
+Analyse resume for: ${field}
 
-Analyse this resume for: ${field}
-
-Resume:
 ${resumeText}
 
-Return ONLY valid JSON:
+Return ONLY JSON:
 {
   "match_score": 0-100,
   "hire_likelihood": "Low|Medium|High|Very High",
-  "summary": "short honest summary",
+  "summary": "short summary",
   "strengths": ["..."],
   "existing_skills": ["..."],
   "missing_skills": ["..."],
@@ -76,23 +81,19 @@ Return ONLY valid JSON:
 `;
 
     const result = await model.generateContent(prompt);
-    const responseText = await result.response.text();
+    const text = await result.response.text();
 
-    // safe JSON parse
     let json;
     try {
-      json = JSON.parse(responseText.replace(/```json|```/g, "").trim());
-    } catch (e) {
-      json = { raw: responseText };
+      json = JSON.parse(text.replace(/```json|```/g, "").trim());
+    } catch {
+      json = { raw: text };
     }
 
     res.json(json);
   } catch (err) {
     console.error("Analyse error:", err);
-    res.status(500).json({
-      error: err.message,
-      details: "Gemini API failed",
-    });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -100,51 +101,29 @@ Return ONLY valid JSON:
 app.post("/api/study-plan", async (req, res) => {
   const { field, weeks, missingSkills, existingSkills } = req.body;
 
-  if (!field) {
-    return res.status(400).json({ error: "field is required" });
-  }
-
   try {
     const prompt = `
-Create a ${weeks || 4}-week study plan for ${field}.
+Create ${weeks || 4}-week study plan for ${field}
 
-Missing skills: ${(missingSkills || []).join(", ")}
-Existing skills: ${(existingSkills || []).join(", ")}
+Missing: ${(missingSkills || []).join(", ")}
+Existing: ${(existingSkills || []).join(", ")}
 
-Return ONLY JSON:
-{
-  "weeks": [
-    {
-      "week": 1,
-      "theme": "string",
-      "goal": "string",
-      "daily_hours": 3,
-      "tasks": ["task1", "task2", "task3"],
-      "resource": "string",
-      "project": "string"
-    }
-  ],
-  "final_project": "string",
-  "apply_strategy": "string"
-}
+Return ONLY JSON
 `;
 
     const result = await model.generateContent(prompt);
-    const responseText = await result.response.text();
+    const text = await result.response.text();
 
     let json;
     try {
-      json = JSON.parse(responseText.replace(/```json|```/g, "").trim());
-    } catch (e) {
-      json = { raw: responseText };
+      json = JSON.parse(text.replace(/```json|```/g, "").trim());
+    } catch {
+      json = { raw: text };
     }
 
     res.json(json);
   } catch (err) {
-    console.error("Study plan error:", err);
-    res.status(500).json({
-      error: "Study plan failed",
-    });
+    res.status(500).json({ error: "Study plan failed" });
   }
 });
 
@@ -152,42 +131,24 @@ Return ONLY JSON:
 app.post("/api/interview/question", async (req, res) => {
   const { field, questionNumber, previousQuestions } = req.body;
 
-  if (!field) {
-    return res.status(400).json({ error: "field is required" });
-  }
-
   try {
     const prompt = `
-You are an interviewer for ${field} roles.
-
-Ask ONE interview question.
-Question number: ${questionNumber || 1}
-Avoid repeating: ${(previousQuestions || []).join(", ")}
-
-Return ONLY the question text.
+Ask ONE ${field} interview question.
+Avoid: ${(previousQuestions || []).join(", ")}
 `;
 
     const result = await model.generateContent(prompt);
-    const responseText = await result.response.text();
+    const text = await result.response.text();
 
-    res.json({ question: responseText.trim() });
+    res.json({ question: text.trim() });
   } catch (err) {
-    console.error("Interview question error:", err);
-    res.status(500).json({
-      error: "Failed to generate question",
-    });
+    res.status(500).json({ error: "Question failed" });
   }
 });
 
-// ================= INTERVIEW FEEDBACK =================
+// ================= FEEDBACK =================
 app.post("/api/interview/feedback", async (req, res) => {
   const { field, question, answer } = req.body;
-
-  if (!question || !answer) {
-    return res.status(400).json({
-      error: "question and answer required",
-    });
-  }
 
   try {
     const prompt = `
@@ -195,32 +156,29 @@ Field: ${field}
 Question: ${question}
 Answer: ${answer}
 
-Return ONLY JSON:
+Return JSON:
 {
   "score": 1-10,
   "verdict": "Good|Needs work|Weak",
-  "what_worked": "string",
-  "what_missed": "string",
-  "model_answer_hint": "string"
+  "what_worked": "",
+  "what_missed": "",
+  "model_answer_hint": ""
 }
 `;
 
     const result = await model.generateContent(prompt);
-    const responseText = await result.response.text();
+    const text = await result.response.text();
 
     let json;
     try {
-      json = JSON.parse(responseText.replace(/```json|```/g, "").trim());
-    } catch (e) {
-      json = { raw: responseText };
+      json = JSON.parse(text.replace(/```json|```/g, "").trim());
+    } catch {
+      json = { raw: text };
     }
 
     res.json(json);
   } catch (err) {
-    console.error("Feedback error:", err);
-    res.status(500).json({
-      error: "Feedback failed",
-    });
+    res.status(500).json({ error: "Feedback failed" });
   }
 });
 
