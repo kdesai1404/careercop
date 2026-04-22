@@ -53,7 +53,7 @@ app.post("/api/analyse", async (req, res) => {
 
   try {
     const message = await client.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 1024,
       system: `You are a brutally honest but constructive career advisor who analyses resumes for tech internship roles. Always return ONLY valid JSON.`,
       messages: [
@@ -90,7 +90,7 @@ app.post("/api/study-plan", async (req, res) => {
 
   try {
     const message = await client.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 2048,
       system: `You are a structured learning coach. Return ONLY JSON.`,
       messages: [
@@ -127,7 +127,7 @@ app.post("/api/interview/question", async (req, res) => {
 
   try {
     const message = await client.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 256,
       system: `You are a senior engineer conducting interviews.`,
       messages: [
@@ -162,7 +162,7 @@ app.post("/api/interview/feedback", async (req, res) => {
 
   try {
     const message = await client.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 400,
       system: `You are a tough but fair interview coach. Return JSON only.`,
       messages: [
