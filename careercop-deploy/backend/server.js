@@ -67,8 +67,9 @@ Return ONLY this exact JSON structure (no backticks, no extra text):
     res.json(json);
   } catch (err) {
     console.error("Analyse error:", err);
-    res.status(500).json({ error: "Analysis failed. Check your API key and try again." });
-  }
+    res.status(500).json({ 
+  error: err.message,
+  details: "Backend crashed during AI call"
 });
 
 // POST /api/study-plan — generate personalised week-by-week plan
