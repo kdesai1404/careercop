@@ -1,0 +1,153 @@
+# 🚀 CareerCopilot — Deployment Guide
+# Follow these steps in order. Takes about 15 minutes total.
+
+=======================================================
+STEP 1 — PUSH TO GITHUB (5 minutes)
+=======================================================
+
+1. Go to https://github.com → Sign in (or sign up free)
+
+2. Click the green "New" button → Create a new repository
+   - Name: careercop
+   - Visibility: Public  ← important for free deployment
+   - Do NOT add README or .gitignore (we have our own)
+   - Click "Create repository"
+
+3. Open your terminal in the careercop folder and run:
+
+   git init
+   git add .
+   git commit -m "Initial commit — CareerCopilot"
+   git branch -M main
+   git remote add origin https://github.com/YOUR_USERNAME/careercop.git
+   git push -u origin main
+
+   Replace YOUR_USERNAME with your actual GitHub username.
+
+4. Refresh GitHub — you should see all your files there. ✅
+
+
+=======================================================
+STEP 2 — DEPLOY BACKEND TO RENDER (5 minutes)
+=======================================================
+
+Render gives you a free Node.js server. It's where your API lives.
+
+1. Go to https://render.com → Sign up with GitHub (easier)
+
+2. Click "New +" → "Web Service"
+
+3. Connect your GitHub → select the "careercop" repo
+
+4. Fill in the settings:
+   ┌─────────────────────────────────────────────────┐
+   │ Name:           careercop-api                   │
+   │ Root Directory: backend                         │
+   │ Runtime:        Node                            │
+   │ Build Command:  npm install                     │
+   │ Start Command:  node server.js                  │
+   │ Instance Type:  Free                            │
+   └─────────────────────────────────────────────────┘
+
+5. Scroll down to "Environment Variables" → click "Add"
+   Key:   ANTHROPIC_API_KEY
+   Value: sk-ant-your-actual-key-here   ← paste your key
+
+6. Click "Create Web Service"
+
+7. Wait 3–5 minutes for it to build and deploy.
+
+8. Copy your Render URL — it looks like:
+   https://careercop-api.onrender.com
+   
+   You'll need this in Step 3. ✅
+
+   ⚠️ NOTE: Free Render servers "sleep" after 15 min of inactivity.
+   First request after sleep takes ~30 seconds. This is normal on the free plan.
+
+
+=======================================================
+STEP 3 — DEPLOY FRONTEND TO VERCEL (5 minutes)
+=======================================================
+
+Vercel hosts your React app for free, forever.
+
+1. Go to https://vercel.com → Sign up with GitHub
+
+2. Click "Add New Project" → Import your "careercop" repo
+
+3. Set the configuration:
+   ┌─────────────────────────────────────────────────┐
+   │ Framework Preset: Vite                          │
+   │ Root Directory:   frontend    ← IMPORTANT       │
+   │ Build Command:    npm run build                 │
+   │ Output Directory: dist                          │
+   └─────────────────────────────────────────────────┘
+
+4. Expand "Environment Variables" → Add:
+   Key:   VITE_API_URL
+   Value: https://careercop-api.onrender.com   ← your Render URL from Step 2
+   
+   ⚠️ NO trailing slash at the end of the URL
+
+5. Click "Deploy"
+
+6. Wait 2 minutes. Vercel will give you a URL like:
+   https://careercop.vercel.app
+
+7. Open it — your app is LIVE! 🎉
+
+
+=======================================================
+STEP 4 — TEST YOUR LIVE APP
+=======================================================
+
+1. Open https://careercop.vercel.app
+2. Select a field → enter weeks → upload/paste a resume
+3. Check that analysis loads (may take 30s first time if Render is sleeping)
+4. Go through study plan and mock interview
+5. Everything working? You're done! 🎉
+
+
+=======================================================
+STEP 5 — ADD TO YOUR RESUME & GITHUB
+=======================================================
+
+Resume project line (copy this exactly):
+
+  CareerCopilot — AI Internship Prep Platform             [Live] [GitHub]
+  • Full-stack web app: React 18 (Vite) frontend + Node.js/Express REST API
+  • Integrated Anthropic Claude API for resume analysis, personalised study
+    plan generation, and interactive mock interviews with real-time feedback
+  • Features: PDF resume parsing, match score (0–100), skill gap detection
+  • Deployed: frontend on Vercel, backend on Render with environment-based config
+
+GitHub README tip:
+  Add your live Vercel URL to the top of your README.
+  Add a screenshot of the app.
+  This makes your GitHub profile look active and professional.
+
+
+=======================================================
+TROUBLESHOOTING
+=======================================================
+
+Problem: "Failed to fetch" on the live site
+Fix: Check that VITE_API_URL in Vercel matches your Render URL exactly
+     Go to Vercel → Settings → Environment Variables to edit
+
+Problem: Render build fails
+Fix: Check the Render logs. Most common cause is wrong Root Directory.
+     It must be "backend" (lowercase, no slash)
+
+Problem: "Invalid API key" error
+Fix: Re-check your ANTHROPIC_API_KEY in Render environment variables.
+     The key should start with sk-ant-
+
+Problem: App works locally but not on Vercel
+Fix: Make sure you set VITE_API_URL in Vercel environment variables.
+     After changing env variables, redeploy: Vercel → Deployments → Redeploy
+
+Problem: First load is very slow (30+ seconds)
+Fix: This is normal — free Render servers sleep. 
+     Upgrade to Render's $7/month plan to prevent sleeping if needed.
