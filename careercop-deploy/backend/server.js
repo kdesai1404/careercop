@@ -7,34 +7,42 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
-// ================= MULTER =================
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
+// ================= DEBUG =================
+console.log("GEMINI KEY LOADED:", !!process.env.GEMINI_API_KEY);
 
-// ================= GEMINI =================
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
-});
-
-// ================= MIDDLEWARE (FIXED CORS) =================
+// ================= MIDDLEWARE =================
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// IMPORTANT: handle preflight requests
 app.options("*", cors());
-
 app.use(express.json({ limit: "2mb" }));
+
+// ================= MULTER =================
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 // ================= HEALTH CHECK =================
 app.get("/", (req, res) => {
   res.json({ status: "CareerCopilot API running" });
 });
+
+// ================= GEMINI HELPER =================
+function getModel() {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY not set");
+  }
+
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+  return genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+  });
+}
 
 // ================= PDF PARSER =================
 app.post("/api/parse-pdf", upload.single("resume"), async (req, res) => {
@@ -45,23 +53,24 @@ app.post("/api/parse-pdf", upload.single("resume"), async (req, res) => {
 
     const data = await pdf(req.file.buffer);
     res.json({ text: data.text });
+
   } catch (err) {
-    console.error("PDF parse error:", err);
+    console.error("PDF ERROR:", err);
     res.status(500).json({ error: "Failed to parse PDF" });
   }
 });
 
-// ================= ANALYSE =================
+// ================= ANALYSE RESUME =================
 app.post("/api/analyse", async (req, res) => {
-  const { resumeText, field, weeks } = req.body;
-
-  if (!resumeText || !field) {
-    return res.status(400).json({
-      error: "resumeText and field required",
-    });
-  }
-
   try {
+    const { resumeText, field, weeks } = req.body;
+
+    if (!resumeText || !field) {
+      return res.status(400).json({ error: "Missing data" });
+    }
+
+    const model = getModel();
+
     const prompt = `
 Analyse resume for: ${field}
 
@@ -91,24 +100,27 @@ Return ONLY JSON:
     }
 
     res.json(json);
+
   } catch (err) {
-    console.error("Analyse error:", err);
+    console.error("ANALYSE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ================= STUDY PLAN =================
 app.post("/api/study-plan", async (req, res) => {
-  const { field, weeks, missingSkills, existingSkills } = req.body;
-
   try {
+    const { field, weeks, missingSkills, existingSkills } = req.body;
+
+    const model = getModel();
+
     const prompt = `
 Create ${weeks || 4}-week study plan for ${field}
 
 Missing: ${(missingSkills || []).join(", ")}
 Existing: ${(existingSkills || []).join(", ")}
 
-Return ONLY JSON
+Return ONLY JSON.
 `;
 
     const result = await model.generateContent(prompt);
@@ -122,16 +134,20 @@ Return ONLY JSON
     }
 
     res.json(json);
+
   } catch (err) {
+    console.error("STUDY PLAN ERROR:", err);
     res.status(500).json({ error: "Study plan failed" });
   }
 });
 
 // ================= INTERVIEW QUESTION =================
 app.post("/api/interview/question", async (req, res) => {
-  const { field, questionNumber, previousQuestions } = req.body;
-
   try {
+    const { field, previousQuestions } = req.body;
+
+    const model = getModel();
+
     const prompt = `
 Ask ONE ${field} interview question.
 Avoid: ${(previousQuestions || []).join(", ")}
@@ -141,16 +157,20 @@ Avoid: ${(previousQuestions || []).join(", ")}
     const text = await result.response.text();
 
     res.json({ question: text.trim() });
+
   } catch (err) {
+    console.error("QUESTION ERROR:", err);
     res.status(500).json({ error: "Question failed" });
   }
 });
 
 // ================= FEEDBACK =================
 app.post("/api/interview/feedback", async (req, res) => {
-  const { field, question, answer } = req.body;
-
   try {
+    const { field, question, answer } = req.body;
+
+    const model = getModel();
+
     const prompt = `
 Field: ${field}
 Question: ${question}
@@ -177,7 +197,9 @@ Return JSON:
     }
 
     res.json(json);
+
   } catch (err) {
+    console.error("FEEDBACK ERROR:", err);
     res.status(500).json({ error: "Feedback failed" });
   }
 });
@@ -186,9 +208,5 @@ Return JSON:
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
-  console.log(`Server running`);
-});
-
-app.get("/test", (req, res) => {
-  res.json({ ok: true });
+  console.log(`Server running on port ${PORT}`);
 });
