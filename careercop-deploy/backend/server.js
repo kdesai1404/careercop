@@ -89,21 +89,31 @@ Return ONLY JSON:
 }
 `;
 
+    console.log("➡️ Sending request to Gemini...");
+
     const result = await model.generateContent(prompt);
-    const text = await result.response.text();
+
+    const response = await result.response;
+    const text = response.text();
+
+    console.log("✅ Gemini response received");
 
     let json;
     try {
       json = JSON.parse(text.replace(/```json|```/g, "").trim());
-    } catch {
+    } catch (e) {
+      console.log("⚠️ JSON parse failed, raw output:", text);
       json = { raw: text };
     }
 
     res.json(json);
 
   } catch (err) {
-    console.error("ANALYSE ERROR:", err);
-    res.status(500).json({ error: err.message });
+    console.error("🔥 ANALYSE ERROR:", err);
+    res.status(500).json({
+      error: err.message,
+      hint: "Check Gemini API key or quota"
+    });
   }
 });
 
