@@ -9,16 +9,16 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "2mb" }));
 
-// ─── Grok API helper ────────────────────────────────────────────────────────
-async function grokChat({ system, userMessage, maxTokens = 1024 }) {
-  const response = await fetch("https://api.x.ai/v1/chat/completions", {
+// ─── Groq API helper ────────────────────────────────────────────────────────
+async function groqChat({ system, userMessage, maxTokens = 1024 }) {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.XAI_API_KEY}`,
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "grok-3",          // or "grok-3-mini" for cheaper calls
+      model: "llama-3.3-70b-versatile",
       max_tokens: maxTokens,
       messages: [
         { role: "system", content: system },
@@ -29,7 +29,7 @@ async function grokChat({ system, userMessage, maxTokens = 1024 }) {
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Grok API error ${response.status}: ${err}`);
+    throw new Error(`Groq API error ${response.status}: ${err}`);
   }
 
   const data = await response.json();
@@ -37,7 +37,7 @@ async function grokChat({ system, userMessage, maxTokens = 1024 }) {
 }
 
 // ─── Health check ────────────────────────────────────────────────────────────
-app.get("/", (req, res) => res.json({ status: "CareerCopilot API running (Grok)" }));
+app.get("/", (req, res) => res.json({ status: "CareerCopilot API running (Groq)" }));
 
 // ─── POST /api/parse-pdf ─────────────────────────────────────────────────────
 app.post("/api/parse-pdf", upload.single("resume"), async (req, res) => {
@@ -58,7 +58,7 @@ app.post("/api/analyse", async (req, res) => {
     return res.status(400).json({ error: "resumeText and field are required" });
 
   try {
-    const raw = await grokChat({
+    const raw = await groqChat({
       maxTokens: 1024,
       system: `You are a brutally honest but constructive career advisor who analyses resumes for tech internship roles. 
 Always return ONLY valid JSON, no markdown fences, no explanation. Be specific and honest, not generic.`,
@@ -84,8 +84,8 @@ Return ONLY this exact JSON structure (no backticks, no extra text):
     const json = JSON.parse(raw.replace(/```json|```/g, "").trim());
     res.json(json);
   } catch (err) {
-    console.error("Analyse error:", err);
-    res.status(500).json({ error: "Analysis failed. Check your API key and try again." });
+    console.error("Analyse error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -95,7 +95,7 @@ app.post("/api/study-plan", async (req, res) => {
   if (!field) return res.status(400).json({ error: "field is required" });
 
   try {
-    const raw = await grokChat({
+    const raw = await groqChat({
       maxTokens: 2048,
       system: `You are a structured learning coach who creates realistic, actionable study plans. 
 Return ONLY valid JSON, no markdown. Be specific with resources (actual website names, course names).`,
@@ -135,8 +135,8 @@ Generate exactly ${weeks || 4} week objects.`,
     const json = JSON.parse(raw.replace(/```json|```/g, "").trim());
     res.json(json);
   } catch (err) {
-    console.error("Study plan error:", err);
-    res.status(500).json({ error: "Study plan generation failed." });
+    console.error("Study plan error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -146,7 +146,7 @@ app.post("/api/interview/question", async (req, res) => {
   if (!field) return res.status(400).json({ error: "field is required" });
 
   try {
-    const question = await grokChat({
+    const question = await groqChat({
       maxTokens: 256,
       system: `You are a senior engineer conducting a real internship interview for ${field} roles. 
 Ask ONE question per response. Mix technical and behavioral. Be realistic — these are actual questions interviewers ask.
@@ -161,8 +161,8 @@ Return ONLY the question.`,
 
     res.json({ question: question.trim() });
   } catch (err) {
-    console.error("Interview question error:", err);
-    res.status(500).json({ error: "Could not generate question." });
+    console.error("Interview question error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -173,7 +173,7 @@ app.post("/api/interview/feedback", async (req, res) => {
     return res.status(400).json({ error: "question and answer required" });
 
   try {
-    const raw = await grokChat({
+    const raw = await groqChat({
       maxTokens: 400,
       system: `You are a tough but fair interview coach. Give honest, actionable feedback.
 Return ONLY valid JSON, no markdown.`,
@@ -194,8 +194,8 @@ Return ONLY this JSON:
     const json = JSON.parse(raw.replace(/```json|```/g, "").trim());
     res.json(json);
   } catch (err) {
-    console.error("Feedback error:", err);
-    res.status(500).json({ error: "Could not generate feedback." });
+    console.error("Feedback error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
