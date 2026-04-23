@@ -3,12 +3,12 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const pdf = require("pdf-parse");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Groq = require("groq-sdk");
 
 const app = express();
 
 // ================= DEBUG =================
-console.log("GEMINI KEY LOADED:", !!process.env.GEMINI_API_KEY);
+console.log("GROQ KEY LOADED:", !!process.env.GROQ_API_KEY);
 
 // ================= MIDDLEWARE =================
 app.use(cors({
@@ -31,17 +31,21 @@ app.get("/", (req, res) => {
   res.json({ status: "CareerCopilot API running" });
 });
 
-// ================= GEMINI HELPER =================
-function getModel() {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY not set");
+// ================= GROQ HELPER =================
+async function askGroq(prompt) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY not set");
   }
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-  return genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.7,
   });
+
+  return completion.choices[0].message.content;
 }
 
 // ================= PDF PARSER =================
@@ -69,14 +73,12 @@ app.post("/api/analyse", async (req, res) => {
       return res.status(400).json({ error: "Missing data" });
     }
 
-    const model = getModel();
-
     const prompt = `
 Analyse resume for: ${field}
 
 ${resumeText}
 
-Return ONLY JSON:
+Return ONLY valid JSON with no extra text, no markdown, no code fences:
 {
   "match_score": 0-100,
   "hire_likelihood": "Low|Medium|High|Very High",
@@ -89,14 +91,9 @@ Return ONLY JSON:
 }
 `;
 
-    console.log("➡️ Sending request to Gemini...");
-
-    const result = await model.generateContent(prompt);
-
-    const response = await result.response;
-    const text = response.text();
-
-    console.log("✅ Gemini response received");
+    console.log("➡️ Sending request to Groq...");
+    const text = await askGroq(prompt);
+    console.log("✅ Groq response received");
 
     let json;
     try {
@@ -112,7 +109,7 @@ Return ONLY JSON:
     console.error("🔥 ANALYSE ERROR:", err);
     res.status(500).json({
       error: err.message,
-      hint: "Check Gemini API key or quota"
+      hint: "Check Groq API key or quota"
     });
   }
 });
@@ -122,19 +119,16 @@ app.post("/api/study-plan", async (req, res) => {
   try {
     const { field, weeks, missingSkills, existingSkills } = req.body;
 
-    const model = getModel();
-
     const prompt = `
-Create ${weeks || 4}-week study plan for ${field}
+Create a ${weeks || 4}-week study plan for ${field}.
 
-Missing: ${(missingSkills || []).join(", ")}
-Existing: ${(existingSkills || []).join(", ")}
+Missing skills: ${(missingSkills || []).join(", ")}
+Existing skills: ${(existingSkills || []).join(", ")}
 
-Return ONLY JSON.
+Return ONLY valid JSON with no extra text, no markdown, no code fences.
 `;
 
-    const result = await model.generateContent(prompt);
-    const text = await result.response.text();
+    const text = await askGroq(prompt);
 
     let json;
     try {
@@ -156,16 +150,13 @@ app.post("/api/interview/question", async (req, res) => {
   try {
     const { field, previousQuestions } = req.body;
 
-    const model = getModel();
-
     const prompt = `
 Ask ONE ${field} interview question.
-Avoid: ${(previousQuestions || []).join(", ")}
+Avoid repeating these: ${(previousQuestions || []).join(", ")}
+Reply with just the question, nothing else.
 `;
 
-    const result = await model.generateContent(prompt);
-    const text = await result.response.text();
-
+    const text = await askGroq(prompt);
     res.json({ question: text.trim() });
 
   } catch (err) {
@@ -179,14 +170,12 @@ app.post("/api/interview/feedback", async (req, res) => {
   try {
     const { field, question, answer } = req.body;
 
-    const model = getModel();
-
     const prompt = `
 Field: ${field}
 Question: ${question}
 Answer: ${answer}
 
-Return JSON:
+Return ONLY valid JSON with no extra text, no markdown, no code fences:
 {
   "score": 1-10,
   "verdict": "Good|Needs work|Weak",
@@ -196,8 +185,7 @@ Return JSON:
 }
 `;
 
-    const result = await model.generateContent(prompt);
-    const text = await result.response.text();
+    const text = await askGroq(prompt);
 
     let json;
     try {
