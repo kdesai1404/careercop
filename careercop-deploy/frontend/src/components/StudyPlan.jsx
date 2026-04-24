@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/StudyPlan.jsx << 'EOF'
 import { useState } from "react";
 
 export default function StudyPlan({ data, field, weeks, dailyHours, analysis, onBack, onNext }) {
@@ -177,5 +176,4 @@ export default function StudyPlan({ data, field, weeks, dailyHours, analysis, on
     </div>
   );
 }
-EOF
-echo "StudyPlan.jsx done"
+
