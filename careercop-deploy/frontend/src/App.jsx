@@ -1,3 +1,4 @@
+cat > /mnt/user-data/outputs/App.jsx << 'EOF'
 import { useState } from "react";
 import FieldSelector from "./components/FieldSelector";
 import ResumeUpload from "./components/ResumeUpload";
@@ -13,8 +14,6 @@ const STEPS = [
   { id: 4, label: "Interview" },
 ];
 
-// In production: set VITE_API_URL to your Render backend URL
-// In development: empty string uses the Vite proxy (localhost:3001)
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export const api = {
@@ -34,29 +33,29 @@ export const api = {
     if (!res.ok) throw new Error("Analysis failed");
     return res.json();
   },
-  async studyPlan(field, weeks, missingSkills, existingSkills) {
+  async studyPlan(field, weeks, missingSkills, existingSkills, dailyHours) {
     const res = await fetch(`${API_BASE}/api/study-plan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ field, weeks, missingSkills, existingSkills }),
+      body: JSON.stringify({ field, weeks, missingSkills, existingSkills, dailyHours }),
     });
     if (!res.ok) throw new Error("Study plan failed");
     return res.json();
   },
-  async getQuestion(field, questionNumber, previousQuestions) {
+  async getQuestion(field, questionNumber, previousQuestions, questionType) {
     const res = await fetch(`${API_BASE}/api/interview/question`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ field, questionNumber, previousQuestions }),
+      body: JSON.stringify({ field, questionNumber, previousQuestions, questionType }),
     });
     if (!res.ok) throw new Error("Question failed");
     return res.json();
   },
-  async getFeedback(field, question, answer) {
+  async getFeedback(field, question, answer, questionType) {
     const res = await fetch(`${API_BASE}/api/interview/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ field, question, answer }),
+      body: JSON.stringify({ field, question, answer, questionType }),
     });
     if (!res.ok) throw new Error("Feedback failed");
     return res.json();
@@ -69,17 +68,13 @@ export default function App() {
   const [state, setState] = useState({
     field: "",
     weeks: 4,
+    dailyHours: 2,
     resumeText: "",
     analysis: null,
     studyPlan: null,
   });
 
   const updateState = (patch) => setState((s) => ({ ...s, ...patch }));
-
-  const goTo = (n) => {
-    if (n > step && !doneSteps.has(step)) return;
-    setStep(n);
-  };
 
   const complete = (n) => {
     setDoneSteps((s) => new Set([...s, n]));
@@ -104,7 +99,7 @@ export default function App() {
           CareerCopilot ✦
         </h1>
         <p style={{ color: "var(--text2)", fontSize: 13, marginTop: 8, fontWeight: 300 }}>
-          AI-powered internship prep — resume analysis · skill gaps · study plans · mock interviews
+          AI-powered placement prep — resume analysis · skill gaps · study plans · mock interviews
         </p>
         <div style={{ width: 48, height: 2, background: "linear-gradient(90deg, var(--accent), var(--accent2))", margin: "16px auto 0", borderRadius: 2 }} />
       </header>
@@ -172,7 +167,8 @@ export default function App() {
         <FieldSelector
           value={state.field}
           weeks={state.weeks}
-          onChange={(field, weeks) => updateState({ field, weeks })}
+          dailyHours={state.dailyHours}
+          onChange={(field, weeks, dailyHours) => updateState({ field, weeks, dailyHours })}
           onNext={() => complete(0)}
         />
       )}
@@ -193,6 +189,7 @@ export default function App() {
           field={state.field}
           weeks={state.weeks}
           resumeText={state.resumeText}
+          dailyHours={state.dailyHours}
           onBack={() => setStep(1)}
           onNext={(plan) => { updateState({ studyPlan: plan }); complete(2); }}
         />
@@ -202,6 +199,7 @@ export default function App() {
           data={state.studyPlan}
           field={state.field}
           weeks={state.weeks}
+          dailyHours={state.dailyHours}
           analysis={state.analysis}
           onBack={() => setStep(2)}
           onNext={() => complete(3)}
@@ -217,3 +215,5 @@ export default function App() {
     </div>
   );
 }
+EOF
+echo "App.jsx done"
