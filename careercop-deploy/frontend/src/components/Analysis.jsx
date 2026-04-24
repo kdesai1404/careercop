@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/Analysis.jsx << 'EOF'
 import { useState, useEffect } from "react";
 import { api } from "../App";
 
@@ -123,5 +122,4 @@ export default function Analysis({ data, field, weeks, resumeText, dailyHours, o
     </div>
   );
 }
-EOF
-echo "Analysis.jsx done"
+
