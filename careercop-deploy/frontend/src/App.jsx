@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/App.jsx << 'EOF'
 import { useState } from "react";
 import FieldSelector from "./components/FieldSelector";
 import ResumeUpload from "./components/ResumeUpload";
@@ -215,5 +214,3 @@ export default function App() {
     </div>
   );
 }
-EOF
-echo "App.jsx done"
