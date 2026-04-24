@@ -177,3 +177,4 @@ export default function StudyPlan({ data, field, weeks, dailyHours, analysis, on
   );
 }
 
+
