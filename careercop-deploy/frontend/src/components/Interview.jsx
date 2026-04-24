@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/Interview.jsx << 'EOF'
 import { useState, useRef } from "react";
 import { api } from "../App";
 
@@ -356,5 +355,4 @@ export default function Interview({ field, analysis, onBack }) {
     </div>
   );
 }
-EOF
-echo "Interview.jsx done"
+
