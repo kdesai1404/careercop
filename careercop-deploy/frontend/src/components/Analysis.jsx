@@ -1,3 +1,4 @@
+cat > /mnt/user-data/outputs/Analysis.jsx << 'EOF'
 import { useState, useEffect } from "react";
 import { api } from "../App";
 
@@ -18,7 +19,7 @@ function ScoreBar({ score }) {
   );
 }
 
-export default function Analysis({ data, field, weeks, resumeText, onBack, onNext }) {
+export default function Analysis({ data, field, weeks, resumeText, dailyHours, onBack, onNext }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,16 +39,16 @@ export default function Analysis({ data, field, weeks, resumeText, onBack, onNex
 
   const likeColor = {
     "Very High": "badge-green",
-    "High": "badge-green",
-    "Medium": "badge-amber",
-    "Low": "badge-red",
+    "High":      "badge-green",
+    "Medium":    "badge-amber",
+    "Low":       "badge-red",
   }[data.hire_likelihood] || "badge-purple";
 
   const handleNext = async () => {
     setError("");
     setLoading(true);
     try {
-      const plan = await api.studyPlan(field, weeks, data.missing_skills, data.existing_skills);
+      const plan = await api.studyPlan(field, weeks, data.missing_skills, data.existing_skills, dailyHours);
       onNext(plan);
     } catch {
       setError("Study plan generation failed. Try again.");
@@ -66,7 +67,6 @@ export default function Analysis({ data, field, weeks, resumeText, onBack, onNex
           <span className={`badge ${likeColor}`}>Hire likelihood: {data.hire_likelihood}</span>
           <span className="badge badge-purple">{weeks} weeks to deadline</span>
         </div>
-
         <div className="section-label">Honest assessment</div>
         <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.75 }}>{data.summary}</p>
       </div>
@@ -123,3 +123,5 @@ export default function Analysis({ data, field, weeks, resumeText, onBack, onNex
     </div>
   );
 }
+EOF
+echo "Analysis.jsx done"
