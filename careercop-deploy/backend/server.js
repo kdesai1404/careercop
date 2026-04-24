@@ -60,9 +60,9 @@ app.post("/api/analyse", async (req, res) => {
   try {
     const raw = await groqChat({
       maxTokens: 1024,
-      system: `You are a brutally honest but constructive career advisor who analyses resumes for tech internship roles. 
+      system: `You are a brutally honest but constructive career advisor who analyses resumes for tech placement roles. 
 Always return ONLY valid JSON, no markdown fences, no explanation. Be specific and honest, not generic.`,
-      userMessage: `Analyse this resume for the field: "${field}" (${weeks || 4} weeks until application deadline).
+      userMessage: `Analyse this resume for the field: "${field}" (${weeks || 4} weeks until placement deadline).
 
 RESUME:
 ${resumeText}
@@ -76,7 +76,7 @@ Return ONLY this exact JSON structure (no backticks, no extra text):
   "existing_skills": ["<skill actually mentioned in resume>", "...up to 5"],
   "missing_skills": ["<critical missing skill for ${field}>", "...up to 6 skills"],
   "top_action": "<the single most impactful thing they should do THIS week — be specific>",
-  "realistic_goal": "<honest assessment of what they can realistically achieve in ${weeks || 4} weeks and what kind of internship they can target>",
+  "realistic_goal": "<honest assessment of what they can realistically achieve in ${weeks || 4} weeks and what kind of placement role they can target>",
   "resume_tips": ["<specific resume improvement>", "<specific resume improvement>", "<specific improvement>"]
 }`,
     });
@@ -91,19 +91,28 @@ Return ONLY this exact JSON structure (no backticks, no extra text):
 
 // ─── POST /api/study-plan ─────────────────────────────────────────────────────
 app.post("/api/study-plan", async (req, res) => {
-  const { field, weeks, missingSkills, existingSkills } = req.body;
+  const { field, weeks, missingSkills, existingSkills, dailyHours } = req.body; // ← added dailyHours
   if (!field) return res.status(400).json({ error: "field is required" });
+
+  const hoursPerDay = dailyHours || 2;
+  const totalHours = hoursPerDay * 7 * (weeks || 4);
 
   try {
     const raw = await groqChat({
       maxTokens: 2048,
-      system: `You are a structured learning coach who creates realistic, actionable study plans. 
-Return ONLY valid JSON, no markdown. Be specific with resources (actual website names, course names).`,
-      userMessage: `Create a ${weeks || 4}-week study plan for someone targeting "${field}" internships.
+      system: `You are a structured learning coach who creates realistic, actionable study plans tailored to the candidate's available time.
+Return ONLY valid JSON, no markdown. Be specific with resources (actual website names, course names). Make tasks fit exactly within the daily hours given.`,
+      userMessage: `Create a ${weeks || 4}-week study plan for someone targeting "${field}" placement roles.
 
 Their missing skills: ${(missingSkills || []).join(", ") || "basics of the field"}
 Their existing skills: ${(existingSkills || []).join(", ") || "basic programming"}
-Time available: ${weeks || 4} weeks
+Weeks available: ${weeks || 4}
+Daily study hours available: ${hoursPerDay} hours/day (${hoursPerDay * 7} hours/week, ${totalHours} total hours)
+
+IMPORTANT: Tasks MUST be completable in ${hoursPerDay} hours/day.
+- 1-2h/day: 2-3 focused tasks, lightweight project
+- 3-4h/day: 3-4 tasks, moderate project  
+- 5+h/day: full tasks, bigger projects
 
 Return ONLY this JSON (no backticks):
 {
@@ -112,21 +121,21 @@ Return ONLY this JSON (no backticks):
       "week": 1,
       "theme": "<short theme name, max 4 words>",
       "goal": "<what they will be able to do by end of week>",
-      "daily_hours": <recommended hours per day, integer>,
+      "daily_hours": ${hoursPerDay},
+      "daily_schedule": "<how to split the ${hoursPerDay} hours — e.g. '1h theory + 1h practice'>",
       "tasks": [
-        "<specific task 1>",
-        "<specific task 2>",
-        "<specific task 3>",
-        "<specific task 4>"
+        "<specific task 1 — [estimated time]>",
+        "<specific task 2 — [estimated time]>",
+        "<specific task 3 — [estimated time]>"
       ],
-      "resource": "<specific free resource: e.g. 'The Odin Project - HTML/CSS section' or 'freeCodeCamp JavaScript course'>",
+      "resource": "<specific free resource name>",
       "resource_url": "<actual URL to the resource>",
-      "project": "<small weekend project to build and commit to GitHub>"
+      "project": "<weekend project scoped to ${hoursPerDay}h/day>"
     }
   ],
-  "final_project": "<the one impressive project to build for their resume — include tech stack>",
+  "final_project": "<impressive capstone project scoped to ${totalHours} total hours, with tech stack>",
   "github_tip": "<specific tip for making their GitHub look good>",
-  "apply_strategy": "<where and how to apply for ${field} internships in India>"
+  "apply_strategy": "<where and how to apply for ${field} placement roles in India>"
 }
 
 Generate exactly ${weeks || 4} week objects.`,
@@ -141,25 +150,47 @@ Generate exactly ${weeks || 4} week objects.`,
 });
 
 // ─── POST /api/interview/question ─────────────────────────────────────────────
+const TYPE_INSTRUCTIONS = {
+  personal:      "Ask a PERSONAL/INTRODUCTION question — about background, motivation, goals, strengths/weaknesses, or why they chose this field. E.g. 'Tell me about yourself', 'Why do you want to work in this field?', 'What is your biggest weakness?'",
+  technical:     "Ask a TECHNICAL question — about specific concepts, tools, frameworks, syntax, architecture, or best practices. Test actual technical knowledge.",
+  problemsolving:"Ask a PROBLEM SOLVING question — a coding challenge, algorithm, system design, or debugging scenario. E.g. 'Write a function that...', 'How would you design a system that...'",
+  behavioral:    "Ask a BEHAVIORAL question using STAR format — about past experiences, teamwork, conflict, failure, deadlines. E.g. 'Tell me about a time you failed', 'Describe a challenging project'",
+  hr:            "Ask an HR/SITUATIONAL question — about salary expectations, notice period, relocation, work style, or workplace scenarios. E.g. 'What are your salary expectations?', 'How do you handle feedback from seniors?'",
+};
+
+const TYPE_LABELS = {
+  personal:      "Personal / Intro",
+  technical:     "Technical",
+  problemsolving:"Problem Solving",
+  behavioral:    "Behavioral",
+  hr:            "HR / Situational",
+};
+
 app.post("/api/interview/question", async (req, res) => {
-  const { field, questionNumber, previousQuestions } = req.body;
+  const { field, questionNumber, previousQuestions, questionType } = req.body; // ← added questionType
   if (!field) return res.status(400).json({ error: "field is required" });
+
+  const instruction = TYPE_INSTRUCTIONS[questionType] || `Ask a realistic placement interview question for ${field}. Mix types naturally.`;
 
   try {
     const question = await groqChat({
-      maxTokens: 256,
-      system: `You are a senior engineer conducting a real internship interview for ${field} roles. 
-Ask ONE question per response. Mix technical and behavioral. Be realistic — these are actual questions interviewers ask.
-Return ONLY the question text, nothing else.`,
-      userMessage: `Ask interview question #${questionNumber || 1} for a ${field} internship.
-${previousQuestions?.length ? `Previous questions asked (don't repeat these topics): ${previousQuestions.join(" | ")}` : ""}
-${questionNumber === 1 ? "Start with a common introductory technical question." : ""}
-${questionNumber === 3 ? "Ask a problem-solving or project-based question." : ""}
-${questionNumber === 5 ? "Ask a behavioral question about teamwork or handling challenges." : ""}
+      maxTokens: 300,
+      system: `You are a senior engineer conducting a real placement interview for ${field} roles at a top tech company.
+Ask ONE question per response. Be realistic — these are actual questions interviewers ask.
+Return ONLY the question text, nothing else. No labels, no preamble.`,
+      userMessage: `Interview question #${questionNumber || 1} for a ${field} placement role.
+${previousQuestions?.length ? `Already asked (don't repeat these topics): ${previousQuestions.join(" | ")}` : ""}
+
+Question type instruction: ${instruction}
+
 Return ONLY the question.`,
     });
 
-    res.json({ question: question.trim() });
+    res.json({
+      question: question.trim(),
+      questionType: questionType || "general",
+      questionTypeLabel: TYPE_LABELS[questionType] || "General",
+    });
   } catch (err) {
     console.error("Interview question error:", err.message);
     res.status(500).json({ error: err.message });
@@ -168,16 +199,17 @@ Return ONLY the question.`,
 
 // ─── POST /api/interview/feedback ─────────────────────────────────────────────
 app.post("/api/interview/feedback", async (req, res) => {
-  const { field, question, answer } = req.body;
+  const { field, question, answer, questionType } = req.body; // ← added questionType
   if (!question || !answer)
     return res.status(400).json({ error: "question and answer required" });
 
   try {
     const raw = await groqChat({
-      maxTokens: 400,
-      system: `You are a tough but fair interview coach. Give honest, actionable feedback.
+      maxTokens: 500,
+      system: `You are a tough but fair placement interview coach. Give honest, actionable feedback.
 Return ONLY valid JSON, no markdown.`,
       userMessage: `Field: ${field}
+Question type: ${questionType || "general"}
 Interview question: "${question}"
 Candidate's answer: "${answer}"
 
@@ -187,7 +219,7 @@ Return ONLY this JSON:
   "verdict": "<Good|Needs work|Weak>",
   "what_worked": "<what was good about this answer — be specific>",
   "what_missed": "<what was missing or incorrect — be specific>",
-  "model_answer_hint": "<1-2 sentences on what a strong answer would include>"
+  "model_answer_hint": "<2-3 sentences on what a strong answer would include, tailored to the question type>"
 }`,
     });
 
