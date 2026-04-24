@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/FieldSelector.jsx << 'EOF'
 import { useState } from "react";
 
 const FIELDS = [
@@ -137,5 +136,4 @@ export default function FieldSelector({ value, weeks, dailyHours, onChange, onNe
     </div>
   );
 }
-EOF
-echo "FieldSelector.jsx done"
+
